@@ -2,6 +2,7 @@ from binance.spot import Spot as Client
 import certifi
 import os
 import re
+import json
 os.environ['SSL_CERT_FILE'] = certifi.where()
 
 
@@ -19,6 +20,5 @@ for symbol in symbols:
 
 regular_pairs = [pair for pair in pairs if pair not in special_pairs]
 
-with open("regular_pairs.txt", "a") as txt_file:
-    for pair in regular_pairs:
-        txt_file.write(pair + "\n")
+with open("regular_pairs.json", "a") as json_file:
+    json.dump(regular_pairs, json_file)

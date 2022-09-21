@@ -112,12 +112,21 @@ def get_prices():
             third_price = config.tickers_prices[arbitrage_pairs['third']['ask_price']]
         else:
             raise IndexError("Third token is absent in pairs. Rerun function 'update_trading_pairs")
-        return (first_price, second_price, third_price)
+        return first_price, second_price, third_price
 
 
 def profit_detector():
     first_price, second_price, third_price = get_prices()
 
+
+def get_side(ticker, asset):
+    if ticker.startswith(asset):
+        side = "sell"
+    elif ticker.endswith(asset):
+        side = "buy"
+    else: # на случай, если переданы некорректные тикер и/или монета
+        side = None
+    return side
 
 
 while 1:

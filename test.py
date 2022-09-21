@@ -4,12 +4,18 @@ import time
 import os
 import json
 import certifi
+import config
+
+
+ASK_PRICE = 0
+BID_PRICE = 0
+
+
 os.environ['SSL_CERT_FILE'] = certifi.where()
 spot_client = Client(base_url="https://api.binance.com")
 
-
 with open("arbitrage_opportunity.json", "r") as arb_file:
-    arbitrage_opportunity = json.load(arb_file)
+    arbitrage_opportunities = json.load(arb_file)
 
 
 def runtime(some_function):
@@ -69,10 +75,67 @@ ws_client = WebsocketClient()
 ws_client.start()
 
 
-# def handler(data):
-#     print(data)
-#
-#
+def handler(message):
+    try:
+        config.tickers_prices[message['s']] = {"ask_price": message['a'], "bid_price": message['b']}
+    except Exception:
+        pass
+
+
+ws_client.book_ticker(
+        id=1,
+        callback=handler
+    )
+
+
+def get_prices():
+    for arbitrage_pairs in arbitrage_opportunities:
+        if arbitrage_pairs["first"].startswith(config.base.upper()): # side -> SELL (bid)
+            first_price = config.tickers_prices[arbitrage_pairs['first']['bid_price']]
+            second_token = arbitrage_pairs['first'][len(config.base):]
+        elif arbitrage_pairs["first"].endswith(config.base.upper()): # side -> BUY (ask)
+            first_price = config.tickers_prices[arbitrage_pairs['first']['ask_price']]
+            second_token = arbitrage_pairs['first'][:-len(config.base)]
+        else:
+            raise IndexError("Base asset is absent in pairs. Enter a new base asset")
+        if arbitrage_pairs["second"].startswith(second_token): # side -> SELL (bid)
+            second_price = config.tickers_prices[arbitrage_pairs['second']['bid_price']]
+            third_token = arbitrage_pairs['second'][len(second_token):]
+        elif arbitrage_pairs["second"].endswith(second_token): # side -> BUY (ask)
+            second_price = config.tickers_prices[arbitrage_pairs['second']['ask_price']]
+            third_token = arbitrage_pairs['second'][:-len(second_token)]
+        else:
+            raise IndexError("Second token is absent in pairs. Rerun function 'update_trading_pairs")
+        if arbitrage_pairs["third"].startswith(third_token): # side -> SELL (bid)
+            third_price = config.tickers_prices[arbitrage_pairs['third']['bid_price']]
+        elif arbitrage_pairs["third"].endswith(third_token): # side -> BUY (ask)
+            third_price = config.tickers_prices[arbitrage_pairs['third']['ask_price']]
+        else:
+            raise IndexError("Third token is absent in pairs. Rerun function 'update_trading_pairs")
+        return (first_price, second_price, third_price)
+
+
+def profit_detector():
+    first_price, second_price, third_price = get_prices()
+
+
+
+while 1:
+    try:
+        get_prices()
+    except Exception:
+        pass
+
+
+# def get_prices(base):
+#     bnb_price = spot_client.ticker_price(symbol="BNB")
+#     for pair in arbitrage_opportunity:
+#         first_price = spot_client.ticker_price(pair['first'])
+#         second_price = spot_client.ticker_price(pair['first'])
+#         third_price = spot_client.ticker_price(pair['first'])
+
+
+
 # first_price = ws_client.partial_book_depth(
 #     id=1,
 #     level=5,

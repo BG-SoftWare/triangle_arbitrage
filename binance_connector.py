@@ -1,40 +1,42 @@
-from binance.websocket.spot.websocket_client import SpotWebsocketClient as Client
 from binance.websocket.websocket_client import BinanceWebsocketClient as WebsocketClient
+from binance.spot import Spot as Client
 import certifi
 import os
-import json
-import datetime
 os.environ['SSL_CERT_FILE'] = certifi.where()
-
-
-with open("busd_pairs.json", "r") as json_file:
-    busd_pairs = json.load(json_file)
-
+spot_client = Client(base_url="https://api.binance.com")
 
 def message_handler(message):
     print(message)
 
 
-def price_extractor(response):
-    try:
-        top_bid_qty, top_bid_price = response["bids"][0]
-        top_ask_qty, top_ask_price = response["asks"][0]
-        print(top_bid_price)
-        print(top_ask_price)
-    except Exception as e:
-        print("Some exception")
 
+# def price_extractor(response):
+#     try:
+#         top_bid_price, top_bid_qty = response["bids"][0]
+#         top_ask_price, top_ask_qty = response["asks"][0]
+#         print(top_bid_price, top_bid_qty)
+#         print(top_ask_price, top_ask_qty)
+#     except Exception:
+#         print("Some exception")
 
-ws_client = Client()
-ws_client.start()
+#
+# ws_client = Client()
+# ws_client.start()
 
-ws_client.partial_book_depth(
-    symbol="ETHBUSD",
-    id=1,
-    level=5,
-    speed=100,
-    callback=price_extractor
-)
+# ws_client.book_ticker(
+#     id=1,
+#     symbol="IOTABUSD",
+#     callback=message_handler
+# )
+# ws_client.partial_book_depth(
+#     symbol="ALPHABUSD",
+#     id=1,
+#     level=5,
+#     speed=100,
+#     callback=price_extractor
+# )
+#
+# user_assets = ws_client.user_asset()
 
 
 def get_route(ticker, base):

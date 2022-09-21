@@ -88,52 +88,72 @@ ws_client.book_ticker(
     )
 
 
-def get_prices():
-    for arbitrage_pairs in arbitrage_opportunities:
-        if arbitrage_pairs["first"].startswith(config.base.upper()): # side -> SELL (bid)
-            first_price = config.tickers_prices[arbitrage_pairs['first']['bid_price']]
-            second_token = arbitrage_pairs['first'][len(config.base):]
-        elif arbitrage_pairs["first"].endswith(config.base.upper()): # side -> BUY (ask)
-            first_price = config.tickers_prices[arbitrage_pairs['first']['ask_price']]
-            second_token = arbitrage_pairs['first'][:-len(config.base)]
+def get_prices_and_calculate_profit():
+    for bundle in arbitrage_opportunities:
+        route = get_route(bundle)
+        print(f"Проверка связки {bundle}")
+        if route[0] == "sell":
+            first_price = config.tickers_prices[bundle['first']]['bid_price']
+            second_qty = config.base_qty * first_price * config.fee_percentage
+            print(f"Продаем {second_qty} {bundle['first']} по цене {first_price}")
+        elif route[0] == "buy":
+            first_price = config.tickers_prices[bundle['first']]['ask_price']
+            second_qty = config.base_qty / first_price * config.fee_percentage
+            print(f"Покупаем {second_qty} {bundle['first']} по цене {first_price}")
         else:
-            raise IndexError("Base asset is absent in pairs. Enter a new base asset")
-        if arbitrage_pairs["second"].startswith(second_token): # side -> SELL (bid)
-            second_price = config.tickers_prices[arbitrage_pairs['second']['bid_price']]
-            third_token = arbitrage_pairs['second'][len(second_token):]
-        elif arbitrage_pairs["second"].endswith(second_token): # side -> BUY (ask)
-            second_price = config.tickers_prices[arbitrage_pairs['second']['ask_price']]
-            third_token = arbitrage_pairs['second'][:-len(second_token)]
+            print("Invalid data (first ticker)")
+
+        if route[1] == "sell":
+            second_price = config.tickers_prices[bundle['second']]['bid_price']
+            third_qty = second_qty * second_price * config.fee_percentage
+            print(f"Продаем {third_qty} {bundle['second']} по цене {second_price}")
+        elif route[1] == "buy":
+            second_price = config.tickers_prices[bundle['second']]['ask_price']
+            third_qty = second_qty / second_price * config.fee_percentage
+            print(f"Покупаем {third_qty} {bundle['second']} по цене {second_price}")
         else:
-            raise IndexError("Second token is absent in pairs. Rerun function 'update_trading_pairs")
-        if arbitrage_pairs["third"].startswith(third_token): # side -> SELL (bid)
-            third_price = config.tickers_prices[arbitrage_pairs['third']['bid_price']]
-        elif arbitrage_pairs["third"].endswith(third_token): # side -> BUY (ask)
-            third_price = config.tickers_prices[arbitrage_pairs['third']['ask_price']]
+            print("Invalid data (second ticker)")
+
+        if route[2] == "sell":
+            third_price = config.tickers_prices[bundle['third']]['bid_price']
+            result_qty = third_qty * third_price * config.fee_percentage
+            print(f"Продаем {result_qty} {bundle['third']} по цене {third_price}")
+        elif route[2] == "buy":
+            third_price = config.tickers_prices[bundle['third']]['ask_price']
+            result_qty = third_qty / third_price * config.fee_percentage
+            print(f"Покупаем {result_qty} {bundle['third']} по цене {third_price}")
         else:
-            raise IndexError("Third token is absent in pairs. Rerun function 'update_trading_pairs")
-        return first_price, second_price, third_price
+            print("Invalid data (third ticker)")
+        profit = result_qty - config.base_qty
+        if profit > config.profit:
+            print(f"WE HAVE ARBITRAGE OPPORTUNITY. OUR PROFIT IS {profit} {config.base}")
 
 
-def profit_detector():
-    first_price, second_price, third_price = get_prices()
+def get_route(bundle):
+    if bundle['first'].startswith(config.base):
+        first_side = "sell"
+        second_token = bundle['first'][len(config.base):]
+    elif bundle['first'].endswith(config.base):
+        first_side = "buy"
+        second_token = bundle['first'][:-len(config.base)]
+    if bundle['second'].startswith(second_token):
+        second_side = "sell"
+        third_token = bundle['second'][len(second_token):]
+    elif bundle['second'].endswith(second_token):
+        second_side = "buy"
+        third_token = bundle['second'][:-len(second_token)]
+    if bundle['third'].startswith(third_token):
+        third_side = "sell",
+    elif bundle['third'].endswith(third_token):
+        third_side = "buy"
+    return first_side, second_side, third_side
+get_prices_and_calculate_profit()
 
-
-def get_side(ticker, asset):
-    if ticker.startswith(asset):
-        side = "sell"
-    elif ticker.endswith(asset):
-        side = "buy"
-    else: # на случай, если переданы некорректные тикер и/или монета
-        side = None
-    return side
-
-
-while 1:
-    try:
-        get_prices()
-    except Exception:
-        pass
+# while 1:
+#     try:
+#         get_prices_and_calculate_profit()
+#     except Exception:
+#         pass
 
 
 # def get_prices(base):

@@ -5,17 +5,18 @@ import os
 import json
 import certifi
 import config
-
-
-ASK_PRICE = 0
-BID_PRICE = 0
-
-
+import datetime
 os.environ['SSL_CERT_FILE'] = certifi.where()
 spot_client = Client(base_url="https://api.binance.com")
 
 with open("arbitrage_opportunity.json", "r") as arb_file:
     arbitrage_opportunities = json.load(arb_file)
+
+with open('tickers_prices.json', 'r') as ticker_prices_file:
+    config.tickers_prices = json.load(ticker_prices_file)
+
+ws_client = WebsocketClient()
+ws_client.start()
 
 
 def runtime(some_function):
@@ -71,65 +72,73 @@ def update_trading_pairs():
         json.dump(result_data, data_file)
 
 
-ws_client = WebsocketClient()
-ws_client.start()
-
-
-def handler(message):
+def market_handler(message):
     try:
         config.tickers_prices[message['s']] = {"ask_price": message['a'], "bid_price": message['b']}
     except Exception:
         pass
 
 
-ws_client.book_ticker(
-        id=1,
-        callback=handler
-    )
+def calculate_profit():
+    counter = len(arbitrage_opportunities)
+    arb_op_count = 0
+    time.sleep(10) # Для начальной загрузки цен
+    try:
+        time_start = datetime.datetime.utcnow()
+        for bundle in arbitrage_opportunities:
+            print(f"Проверка связки {bundle}")
+            route = get_route(bundle)
+            if route[0] == "sell":
+                first_price = float(config.tickers_prices[bundle['first']]['bid_price'])
+                second_qty = float(config.base_qty * first_price)
+                print(f"Продаем {second_qty} {bundle['first']} по цене {first_price}")
+            elif route[0] == "buy":
+                first_price = float(config.tickers_prices[bundle['first']]['ask_price'])
+                second_qty = float(config.base_qty / first_price)
+                print(f"Покупаем {second_qty} {bundle['first']} по цене {first_price}")
+            else:
+                print("Invalid data (first ticker)")
 
+            if route[1] == "sell":
+                second_price = float(config.tickers_prices[bundle['second']]['bid_price'])
+                third_qty = float(second_qty * second_price)
+                print(f"Продаем {third_qty} {bundle['second']} по цене {second_price}")
+            elif route[1] == "buy":
+                second_price = float(config.tickers_prices[bundle['second']]['ask_price'])
+                third_qty = float(second_qty / second_price)
+                print(f"Покупаем {third_qty} {bundle['second']} по цене {second_price}")
+            else:
+                print("Invalid data (second ticker)")
 
-def get_prices_and_calculate_profit():
-    for bundle in arbitrage_opportunities:
-        route = get_route(bundle)
-        print(f"Проверка связки {bundle}")
-        if route[0] == "sell":
-            first_price = config.tickers_prices[bundle['first']]['bid_price']
-            second_qty = config.base_qty * first_price * config.fee_percentage
-            print(f"Продаем {second_qty} {bundle['first']} по цене {first_price}")
-        elif route[0] == "buy":
-            first_price = config.tickers_prices[bundle['first']]['ask_price']
-            second_qty = config.base_qty / first_price * config.fee_percentage
-            print(f"Покупаем {second_qty} {bundle['first']} по цене {first_price}")
-        else:
-            print("Invalid data (first ticker)")
+            if route[2] == "sell":
+                third_price = float(config.tickers_prices[bundle['third']]['bid_price'])
+                result_qty = float(third_qty * third_price)
+                print(f"Продаем {result_qty} {bundle['third']} по цене {third_price}")
+            elif route[2] == "buy":
+                third_price = float(config.tickers_prices[bundle['third']]['ask_price'])
+                result_qty = float(third_qty / third_price)
+                print(f"Покупаем {result_qty} {bundle['third']} по цене {third_price}")
+            else:
+                print("Invalid data (third ticker)")
 
-        if route[1] == "sell":
-            second_price = config.tickers_prices[bundle['second']]['bid_price']
-            third_qty = second_qty * second_price * config.fee_percentage
-            print(f"Продаем {third_qty} {bundle['second']} по цене {second_price}")
-        elif route[1] == "buy":
-            second_price = config.tickers_prices[bundle['second']]['ask_price']
-            third_qty = second_qty / second_price * config.fee_percentage
-            print(f"Покупаем {third_qty} {bundle['second']} по цене {second_price}")
-        else:
-            print("Invalid data (second ticker)")
-
-        if route[2] == "sell":
-            third_price = config.tickers_prices[bundle['third']]['bid_price']
-            result_qty = third_qty * third_price * config.fee_percentage
-            print(f"Продаем {result_qty} {bundle['third']} по цене {third_price}")
-        elif route[2] == "buy":
-            third_price = config.tickers_prices[bundle['third']]['ask_price']
-            result_qty = third_qty / third_price * config.fee_percentage
-            print(f"Покупаем {result_qty} {bundle['third']} по цене {third_price}")
-        else:
-            print("Invalid data (third ticker)")
-        profit = result_qty - config.base_qty
-        if profit > config.profit:
-            print(f"WE HAVE ARBITRAGE OPPORTUNITY. OUR PROFIT IS {profit} {config.base}")
+            profit = result_qty - config.base_qty
+            if profit > config.profit:
+                print(f"Есть арбитражное окно. Наш профит составит: {profit} {config.base}")
+                arb_op_count += 1
+            else:
+                print("Нет арбитражного окна")
+            counter -= 1
+            if counter == 0:
+                ws_client.stop()
+        time_delta = datetime.datetime.utcnow() - time_start
+        print(time_delta)
+        print(arb_op_count)
+    except KeyError:
+        pass
 
 
 def get_route(bundle):
+    global third_side, second_side, first_side
     if bundle['first'].startswith(config.base):
         first_side = "sell"
         second_token = bundle['first'][len(config.base):]
@@ -143,78 +152,16 @@ def get_route(bundle):
         second_side = "buy"
         third_token = bundle['second'][:-len(second_token)]
     if bundle['third'].startswith(third_token):
-        third_side = "sell",
+        third_side = "sell"
     elif bundle['third'].endswith(third_token):
         third_side = "buy"
     return first_side, second_side, third_side
-get_prices_and_calculate_profit()
-
-# while 1:
-#     try:
-#         get_prices_and_calculate_profit()
-#     except Exception:
-#         pass
 
 
-# def get_prices(base):
-#     bnb_price = spot_client.ticker_price(symbol="BNB")
-#     for pair in arbitrage_opportunity:
-#         first_price = spot_client.ticker_price(pair['first'])
-#         second_price = spot_client.ticker_price(pair['first'])
-#         third_price = spot_client.ticker_price(pair['first'])
-
-
-
-# first_price = ws_client.partial_book_depth(
-#     id=1,
-#     level=5,
-#     speed=100,
-#     symbol="btcusdt"
-# )
-
-
-# price = ws_client.partial_book_depth(
-#     symbol="BTCUSDT",
-#     id=1,
-#     level=5,
-#     speed=100,
-#     callback=handler
-# )
-
-# @runtime
-# def get_tickers_price():
-#     for bundle in arbitrage_opportunity:
-#         price = spot_client.ticker_price(
-#             symbols=[bundle["first"], bundle["second"], bundle["third"]]
-#         )
-#         print(price)
-
-
-# get_tickers_price()
-# for bundle in arbitrage_bundles:
-#     first_price = ws_client.book_ticker(
-#         id=1,
-#         symbol=bundle["first"],
-#         callback=price_extractor
-#     )
-#     second_price = ws_client.book_ticker(
-#         id=2,
-#         symbol=bundle["second"],
-#         callback=price_extractor
-#     )
-#     third_price = ws_client.book_ticker(
-#         id=3,
-#         symbol=bundle["third"],
-#         callback=price_extractor
-#     )
-#     print(first_price, second_price, third_price)
-
-
-# busd_combinations = get_triangle_combinations('BUSD')
-
-
-
-
+ws_client.book_ticker(
+        id=1,
+        callback=market_handler
+    )
 
 
 # base = "PORTO"

@@ -15,6 +15,8 @@ with open("arbitrage_opportunities.json", "r") as arb_file:
 
 with open('tickers_start_info.json', 'r') as ticker_prices_file:
     config.tickers_start_info = json.load(ticker_prices_file)
+with open('trading_pairs.json', 'r') as trading_pairs_file:
+    trading_pairs = json.load(trading_pairs_file)
 
 ws_client = WebsocketClient()
 ws_client.start()
@@ -64,12 +66,12 @@ def get_triangle_combinations(base):
 
 
 def get_actual_trading_pairs():
-    base_and_quote_asset = []
+    base_and_quote_asset = {}
     tickers = []
     exc_data = spot_client.exchange_info()["symbols"]
     for ticker in exc_data:
         if ticker["status"] != "BREAK":
-            base_and_quote_asset.append([ticker["baseAsset"], ticker["quoteAsset"]])
+            base_and_quote_asset[ticker['symbol']] = ([ticker["baseAsset"], ticker["quoteAsset"]])
             tickers.append(ticker['symbol'])
     with open("trading_pairs.json", "w") as data_file:
         json.dump(base_and_quote_asset, data_file)
@@ -94,6 +96,7 @@ def calculate_profit():
     arb_op_count = 0
     try:
         time_start = datetime.datetime.utcnow()
+        bunch_id = 1
         for bunch in arbitrage_opportunities:
             print(f"Проверка связки {bunch}")
             route = get_route(bunch)
@@ -101,11 +104,11 @@ def calculate_profit():
                 first_price = float(config.tickers_start_info[bunch['first']]['bid_price'])
                 first_qty = float(config.base_qty * first_price)
                 first_side = "sell"
-                print(f"Продаем {first_qty} {bunch['first']} по цене {first_price}")
+                #print(f"Продаем {first_qty} {bunch['first']} по цене {first_price}")
             elif route[0] == "buy":
                 first_price = float(config.tickers_start_info[bunch['first']]['ask_price'])
                 first_qty = float(config.base_qty / first_price)
-                print(f"Покупаем {first_qty} {bunch['first']} по цене {first_price}")
+                #print(f"Покупаем {first_qty} {bunch['first']} по цене {first_price}")
                 first_side = "buy"
             else:
                 print("Invalid data (first ticker)")
@@ -115,12 +118,12 @@ def calculate_profit():
             if route[1] == "sell":
                 second_price = float(config.tickers_start_info[bunch['second']]['bid_price'])
                 second_qty = float(first_qty * second_price)
-                print(f"Продаем {second_qty} {bunch['second']} по цене {second_price}")
+                #print(f"Продаем {second_qty} {bunch['second']} по цене {second_price}")
                 second_side = "sell"
             elif route[1] == "buy":
                 second_price = float(config.tickers_start_info[bunch['second']]['ask_price'])
                 second_qty = float(first_qty / second_price)
-                print(f"Покупаем {second_qty} {bunch['second']} по цене {second_price}")
+                #print(f"Покупаем {second_qty} {bunch['second']} по цене {second_price}")
                 second_side = "buy"
             else:
                 print("Invalid data (second ticker)")
@@ -130,12 +133,12 @@ def calculate_profit():
             if route[2] == "sell":
                 third_price = float(config.tickers_start_info[bunch['third']]['bid_price'])
                 third_qty = float(second_qty * third_price)
-                print(f"Продаем {third_qty} {bunch['third']} по цене {third_price}")
+                #print(f"Продаем {third_qty} {bunch['third']} по цене {third_price}")
                 third_side = "sell"
             elif route[2] == "buy":
                 third_price = float(config.tickers_start_info[bunch['third']]['ask_price'])
                 third_qty = float(second_qty / third_price)
-                print(f"Покупаем {third_qty} {bunch['third']} по цене {third_price}")
+                #print(f"Покупаем {third_qty} {bunch['third']} по цене {third_price}")
                 third_side = "buy"
             else:
                 print("Invalid data (third ticker)")
@@ -145,44 +148,46 @@ def calculate_profit():
             result_fee_amount = first_fee + second_fee + third_fee
             best_depth_prices = [
                 {
-                    "bids": [config.tickers_start_info[bunch['first']['bid_price']],
-                             config.tickers_start_info[bunch['second']['bid_price']],
-                             config.tickers_start_info[bunch['third']['bid_price']]],
-                    "asks": [config.tickers_start_info[bunch['first']['ask_price']],
-                             config.tickers_start_info[bunch['second']['ask_price']],
-                             config.tickers_start_info[bunch['third']['ask_price']]]
+                    "bids": f"[{config.tickers_start_info[bunch['first']]['bid_price']},"
+                            f"{config.tickers_start_info[bunch['second']]['bid_price']},"
+                            f"{config.tickers_start_info[bunch['third']]['bid_price']}]",
+                    "asks": f"[{config.tickers_start_info[bunch['first']]['ask_price']},"
+                            f"{config.tickers_start_info[bunch['second']]['ask_price']},"
+                            f"{config.tickers_start_info[bunch['third']]['ask_price']}]"
                 }
             ]
             best_depth_qty = [
                 {
-                    "bids": [config.tickers_start_info[bunch['first']['bid_qty']],
-                             config.tickers_start_info[bunch['second']['bid_qty']],
-                             config.tickers_start_info[bunch['third']['bid_qty']]],
-                    "asks": [config.tickers_start_info[bunch['first']['ask_qty']],
-                             config.tickers_start_info[bunch['second']['ask_qty']],
-                             config.tickers_start_info[bunch['third']['ask_qty']]]
+                    "bids": f"[{config.tickers_start_info[bunch['first']]['bid_qty']},"
+                            f"{config.tickers_start_info[bunch['second']]['bid_qty']},"
+                            f"{config.tickers_start_info[bunch['third']]['bid_qty']}]",
+                    "asks": f"[{config.tickers_start_info[bunch['first']]['ask_qty']},"
+                            f"{config.tickers_start_info[bunch['second']]['ask_qty']},"
+                            f"{config.tickers_start_info[bunch['third']]['ask_qty']}]"
                 }
             ]
 
             profit = third_qty - float(config.base_qty)
             profit_percentage = float(profit / config.base_qty * 100)
             if profit > config.profit:
-                print(f"Есть арбитражное окно. Наш профит составит: {profit} {config.base}")
+                #print(f"Есть арбитражное окно. Наш профит составит: {profit} {config.base}")
                 is_arbitrage = 1
             else:
                 is_arbitrage = 0
-                print("Нет арбитражного окна")
+                #print("Нет арбитражного окна")
 
             data_for_insert_into_db = (
-                bunch,
+                bunch_id,
+                str(bunch),
                 result_fee_amount,
                 is_arbitrage,
                 profit,
                 profit_percentage,
-                best_depth_prices,
-                best_depth_qty,
+                str(best_depth_prices),
+                str(best_depth_qty),
                 datetime.datetime.utcnow()
             )
+            bunch_id += 1
             db.insert(data_for_insert_into_db)
             counter -= 1
             if counter == 0:
@@ -233,11 +238,11 @@ def get_start_prices_and_qty():
 
 
 def calculate_fee(ticker, side, qty):
-    asset = spot_client.exchange_info(symbol=ticker)['symbols']
+    global fee_amount_btc
     if side == "sell":
-        ticker_asset = asset[0]['quoteAsset']
+        ticker_asset = trading_pairs[ticker][1] # quoteAsset = 1
     elif side == "buy":
-        ticker_asset = asset[0]['baseAsset']
+        ticker_asset = trading_pairs[ticker][0] # baseAsset = 0
 
     if f'{ticker_asset}BTC' in config.tickers_start_info:
         price = config.tickers_start_info[f'{ticker_asset}BTC']['ask_price']

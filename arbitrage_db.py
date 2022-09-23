@@ -9,8 +9,8 @@ def insert(data):
     cursor.execute(
         """
         INSERT INTO triangle_arbitrage 
-        (bunch, fee_amount, is_arbitrage_opportunity, profit_amount, profit_percentage, best_depth_prices,
-        best_depth_qty, checking_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+        (id, bunch, fee_amount, is_arbitrage_opportunity, profit_amount, profit_percentage, best_depth_prices,
+        best_depth_qty, checking_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
         """, data
     )
     conn.commit()

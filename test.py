@@ -9,11 +9,11 @@ import datetime
 os.environ['SSL_CERT_FILE'] = certifi.where()
 spot_client = Client(base_url="https://api.binance.com")
 
-with open("arbitrage_opportunity.json", "r") as arb_file:
+with open("arbitrage_opportunities.json", "r") as arb_file:
     arbitrage_opportunities = json.load(arb_file)
 
-with open('tickers_prices.json', 'r') as ticker_prices_file:
-    config.tickers_prices = json.load(ticker_prices_file)
+with open('tickers_start_info.json', 'r') as ticker_prices_file:
+    config.tickers_start_info = json.load(ticker_prices_file)
 
 ws_client = WebsocketClient()
 ws_client.start()
@@ -34,7 +34,7 @@ def get_triangle_combinations(base):
     combinations = []
     with open("trading_tickers.json", "r") as symbols_file:
         tickers = json.load(symbols_file)
-    with open("data.json", "r") as data_file:
+    with open("trading_pairs.json", "r") as data_file:
         data = json.load(data_file)
     for sym1 in data:
         sym1_token1 = sym1[0]
@@ -58,23 +58,32 @@ def get_triangle_combinations(base):
                             }
                             combinations.append(combination)
     print(len(combinations))
-    with open("arbitrage_opportunity.json", "w") as triang_file:
+    with open("arbitrage_opportunities.json", "w") as triang_file:
         json.dump(combinations, triang_file)
 
 
-def update_trading_pairs():
-    result_data = []
+def get_actual_trading_pairs():
+    base_and_quote_asset = []
+    tickers = []
     exc_data = spot_client.exchange_info()["symbols"]
     for ticker in exc_data:
         if ticker["status"] != "BREAK":
-            result_data.append([ticker["baseAsset"], ticker["quoteAsset"]])
-    with open("data.json", "w") as data_file:
-        json.dump(result_data, data_file)
+            base_and_quote_asset.append([ticker["baseAsset"], ticker["quoteAsset"]])
+            tickers.append(ticker['symbol'])
+    with open("trading_pairs.json", "w") as data_file:
+        json.dump(base_and_quote_asset, data_file)
+    with open("trading_tickers.json", "w") as tickers_file:
+        json.dump(tickers, tickers_file)
 
 
 def market_handler(message):
     try:
-        config.tickers_prices[message['s']] = {"ask_price": message['a'], "bid_price": message['b']}
+        config.tickers_start_info[message['s']] = {
+            "ask_price": message['a'],
+            "bid_price": message['b'],
+            "ask_qty": message['A'],
+            "bid_qty": message['B']
+        }
     except Exception:
         pass
 
@@ -156,6 +165,23 @@ def get_route(bundle):
     elif bundle['third'].endswith(third_token):
         third_side = "buy"
     return first_side, second_side, third_side
+
+
+def get_start_prices_and_qty():
+    info = {}
+    with open("trading_tickers.json", "r") as trading_tickers_file:
+        trading_tickers = json.load(trading_tickers_file)
+
+    for ticker in trading_tickers:
+        ticker_info = spot_client.book_ticker(ticker)
+        info[ticker] = {
+            "ask_price": ticker_info['askPrice'],
+            "bid_price": ticker_info['bidPrice'],
+            "ask_qty": ticker_info['askQty'],
+            "bid_qty": ticker_info['bidQty']
+        }
+    with open("tickers_start_info.json", "w") as json_file:
+        json.dump(info, json_file)
 
 
 ws_client.book_ticker(

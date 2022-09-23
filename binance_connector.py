@@ -38,11 +38,3 @@ def message_handler(message):
 #
 # user_assets = ws_client.user_asset()
 
-
-def get_route(ticker, base):
-    if ticker.startwith(base):
-        return "SELL"
-    elif ticker.endwith(base):
-        return "BUY"
-    else:
-        print("Invalid ticker!")

@@ -6,6 +6,7 @@ import json
 import certifi
 import config
 import datetime
+import arbitrage_db as db
 os.environ['SSL_CERT_FILE'] = certifi.where()
 spot_client = Client(base_url="https://api.binance.com")
 
@@ -91,51 +92,98 @@ def market_handler(message):
 def calculate_profit():
     counter = len(arbitrage_opportunities)
     arb_op_count = 0
-    time.sleep(10) # Для начальной загрузки цен
     try:
         time_start = datetime.datetime.utcnow()
-        for bundle in arbitrage_opportunities:
-            print(f"Проверка связки {bundle}")
-            route = get_route(bundle)
+        for bunch in arbitrage_opportunities:
+            print(f"Проверка связки {bunch}")
+            route = get_route(bunch)
             if route[0] == "sell":
-                first_price = float(config.tickers_prices[bundle['first']]['bid_price'])
-                second_qty = float(config.base_qty * first_price)
-                print(f"Продаем {second_qty} {bundle['first']} по цене {first_price}")
+                first_price = float(config.tickers_start_info[bunch['first']]['bid_price'])
+                first_qty = float(config.base_qty * first_price)
+                first_side = "sell"
+                print(f"Продаем {first_qty} {bunch['first']} по цене {first_price}")
             elif route[0] == "buy":
-                first_price = float(config.tickers_prices[bundle['first']]['ask_price'])
-                second_qty = float(config.base_qty / first_price)
-                print(f"Покупаем {second_qty} {bundle['first']} по цене {first_price}")
+                first_price = float(config.tickers_start_info[bunch['first']]['ask_price'])
+                first_qty = float(config.base_qty / first_price)
+                print(f"Покупаем {first_qty} {bunch['first']} по цене {first_price}")
+                first_side = "buy"
             else:
                 print("Invalid data (first ticker)")
 
+            first_fee = calculate_fee(bunch['first'], first_side, first_qty)
+
             if route[1] == "sell":
-                second_price = float(config.tickers_prices[bundle['second']]['bid_price'])
-                third_qty = float(second_qty * second_price)
-                print(f"Продаем {third_qty} {bundle['second']} по цене {second_price}")
+                second_price = float(config.tickers_start_info[bunch['second']]['bid_price'])
+                second_qty = float(first_qty * second_price)
+                print(f"Продаем {second_qty} {bunch['second']} по цене {second_price}")
+                second_side = "sell"
             elif route[1] == "buy":
-                second_price = float(config.tickers_prices[bundle['second']]['ask_price'])
-                third_qty = float(second_qty / second_price)
-                print(f"Покупаем {third_qty} {bundle['second']} по цене {second_price}")
+                second_price = float(config.tickers_start_info[bunch['second']]['ask_price'])
+                second_qty = float(first_qty / second_price)
+                print(f"Покупаем {second_qty} {bunch['second']} по цене {second_price}")
+                second_side = "buy"
             else:
                 print("Invalid data (second ticker)")
 
+            second_fee = calculate_fee(bunch['second'], second_side, second_qty)
+
             if route[2] == "sell":
-                third_price = float(config.tickers_prices[bundle['third']]['bid_price'])
-                result_qty = float(third_qty * third_price)
-                print(f"Продаем {result_qty} {bundle['third']} по цене {third_price}")
+                third_price = float(config.tickers_start_info[bunch['third']]['bid_price'])
+                third_qty = float(second_qty * third_price)
+                print(f"Продаем {third_qty} {bunch['third']} по цене {third_price}")
+                third_side = "sell"
             elif route[2] == "buy":
-                third_price = float(config.tickers_prices[bundle['third']]['ask_price'])
-                result_qty = float(third_qty / third_price)
-                print(f"Покупаем {result_qty} {bundle['third']} по цене {third_price}")
+                third_price = float(config.tickers_start_info[bunch['third']]['ask_price'])
+                third_qty = float(second_qty / third_price)
+                print(f"Покупаем {third_qty} {bunch['third']} по цене {third_price}")
+                third_side = "buy"
             else:
                 print("Invalid data (third ticker)")
 
-            profit = result_qty - config.base_qty
+            third_fee = calculate_fee(bunch['third'], third_side, third_qty)
+
+            result_fee_amount = first_fee + second_fee + third_fee
+            best_depth_prices = [
+                {
+                    "bids": [config.tickers_start_info[bunch['first']['bid_price']],
+                             config.tickers_start_info[bunch['second']['bid_price']],
+                             config.tickers_start_info[bunch['third']['bid_price']]],
+                    "asks": [config.tickers_start_info[bunch['first']['ask_price']],
+                             config.tickers_start_info[bunch['second']['ask_price']],
+                             config.tickers_start_info[bunch['third']['ask_price']]]
+                }
+            ]
+            best_depth_qty = [
+                {
+                    "bids": [config.tickers_start_info[bunch['first']['bid_qty']],
+                             config.tickers_start_info[bunch['second']['bid_qty']],
+                             config.tickers_start_info[bunch['third']['bid_qty']]],
+                    "asks": [config.tickers_start_info[bunch['first']['ask_qty']],
+                             config.tickers_start_info[bunch['second']['ask_qty']],
+                             config.tickers_start_info[bunch['third']['ask_qty']]]
+                }
+            ]
+
+            profit = third_qty - float(config.base_qty)
+            profit_percentage = float(profit / config.base_qty * 100)
             if profit > config.profit:
                 print(f"Есть арбитражное окно. Наш профит составит: {profit} {config.base}")
-                arb_op_count += 1
+                is_arbitrage = 1
             else:
+                is_arbitrage = 0
                 print("Нет арбитражного окна")
+
+            data_for_insert_into_db = (
+                bunch,
+                result_fee_amount,
+                is_arbitrage,
+                profit,
+                profit_percentage,
+                best_depth_prices,
+                best_depth_qty,
+                datetime.datetime.utcnow()
+            )
+            db.insert(data_for_insert_into_db)
             counter -= 1
             if counter == 0:
                 ws_client.stop()
@@ -143,7 +191,7 @@ def calculate_profit():
         print(time_delta)
         print(arb_op_count)
     except KeyError:
-        pass
+        print("KEY ERROR")
 
 
 def get_route(bundle):
@@ -184,12 +232,30 @@ def get_start_prices_and_qty():
         json.dump(info, json_file)
 
 
+def calculate_fee(ticker, side, qty):
+    asset = spot_client.exchange_info(symbol=ticker)['symbols']
+    if side == "sell":
+        ticker_asset = asset[0]['quoteAsset']
+    elif side == "buy":
+        ticker_asset = asset[0]['baseAsset']
+
+    if f'{ticker_asset}BTC' in config.tickers_start_info:
+        price = config.tickers_start_info[f'{ticker_asset}BTC']['ask_price']
+        fee_amount_btc = float(qty) * float(price)
+    elif f'BTC{ticker_asset}' in config.tickers_start_info:
+        price = config.tickers_start_info[f'BTC{ticker_asset}']['bid_price']
+        fee_amount_btc = float(qty) / float(price)
+    bnb_btc_price = config.tickers_start_info['BNBBTC']['ask_price']
+    result_fee_amount = float(fee_amount_btc) * float(bnb_btc_price)
+    return result_fee_amount
+
+
 ws_client.book_ticker(
         id=1,
         callback=market_handler
     )
 
-
+calculate_profit()
 # base = "PORTO"
 #
 # data_1 = [{"PORTO": "TRY"}, ]

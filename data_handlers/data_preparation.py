@@ -8,10 +8,10 @@ import config
 
 
 class DataPreparation:
-    if os.path.exists("source"):
+    if os.path.exists("../source"):
         pass
     else:
-        os.mkdir("source")
+        os.mkdir("../source")
 
     def __init__(self):
         self.base_token = config.base_token.upper()
@@ -39,7 +39,7 @@ class DataPreparation:
                     values = list(symbol_filter.values())
                     updating = {values[0].lower(): dict(zip(keys[1:], values[1:]))}
                     self.trading_pairs[ticker['symbol']].update(updating)
-        with open("source/trading_pairs.json", "w") as data_file:
+        with open("../source/trading_pairs.json", "w") as data_file:
             json.dump(self.trading_pairs, data_file)
 
     def get_triangle_combination(self):

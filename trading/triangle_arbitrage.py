@@ -56,7 +56,7 @@ class TriangleArbitrage:
         with open(f"source/arbitrage_combinations_{self.base_token.lower()}.json", "r") as combination_file:
             self.pairs_list = json.load(combination_file)
 
-        with open("source/trading_pairs.json", "r") as trade_file:
+        with open("../source/trading_pairs.json", "r") as trade_file:
             self.trading_pairs = json.load(trade_file)
 
     def get_prices(self, combination):

@@ -1,4 +1,3 @@
-import logging
 from sqlalchemy import Table, Column, Integer, String, MetaData, Text, DateTime
 from sqlalchemy import create_engine, select, insert, and_
 from sqlalchemy import DECIMAL

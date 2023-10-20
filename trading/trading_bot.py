@@ -13,7 +13,7 @@ from binance.websocket.spot.websocket_client import SpotWebsocketClient as Webso
 from redis import Redis
 
 import config
-import db_connector
+from data_handlers import db_connector
 import logger
 
 os.environ['SSL_CERT_FILE'] = certifi.where()
